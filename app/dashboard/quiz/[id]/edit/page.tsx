@@ -180,7 +180,7 @@ export default function EditQuizPage() {
 
       <p className="mt-8 text-sm">
         <Link href={`/dashboard/quiz/${id}/sessions`} className="underline">
-          Session history
+          Sessions, QR &amp; host screen
         </Link>
       </p>
     </main>

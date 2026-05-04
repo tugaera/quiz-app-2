@@ -290,11 +290,15 @@ export default function HostSessionPage() {
               <p className="text-2xl font-bold">
                 {lobbyCount} players ready
               </p>
+              <p className="text-sm opacity-60 max-w-md text-center">
+                Share the QR or link while you set up. You can start the quiz
+                whenever you&apos;re ready — players don&apos;t have to join
+                first.
+              </p>
               <button
                 type="button"
                 onClick={start}
-                disabled={lobbyCount < 1}
-                className="mt-4 rounded-full bg-violet-600 hover:bg-violet-500 disabled:opacity-40 px-8 py-3 font-semibold text-lg"
+                className="mt-4 rounded-full bg-violet-600 hover:bg-violet-500 px-8 py-3 font-semibold text-lg"
               >
                 Start Quiz
               </button>
