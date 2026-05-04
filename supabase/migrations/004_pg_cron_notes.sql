@@ -1,0 +1,22 @@
+-- Optional: schedule server-side calls with pg_cron + pg_net (Supabase add-ons).
+-- Sequential mode in this project is also driven by `advance-question` Edge Function
+-- chaining via `EdgeRuntime.waitUntil` (see `supabase/functions/advance-question/index.ts`).
+--
+-- Example pattern if you prefer DB cron instead:
+--
+-- select cron.schedule(
+--   'invoke-advance-example',
+--   '* * * * *',
+--   $$
+--   select net.http_post(
+--     url := current_setting('app.supabase_url') || '/functions/v1/advance-question',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+--     ),
+--     body := jsonb_build_object('session_id', '00000000-0000-0000-0000-000000000000', 'action', 'expire_question')
+--   );
+--   $$
+-- );
+
+select 1;
