@@ -3,7 +3,7 @@ import {
   createServerSupabaseClient,
   createServiceRoleClient,
 } from "@/lib/supabase/server";
-import type { QuizWithQuestions } from "@/lib/types/database";
+import type { QuizWithQuestions, ReviewStats } from "@/lib/types/database";
 import {
   sanitizeQuizForPlayer,
   unwrapEmbeddedQuiz,
@@ -65,6 +65,59 @@ export async function GET(
 
   const safeQuiz = isHost ? orderedQuiz : sanitizeQuizForPlayer(orderedQuiz);
 
+  const sortedQs = orderedQuiz.questions;
+
+  let review: {
+    stats: ReviewStats;
+    correct_option_text: string | null;
+    is_last_question: boolean;
+  } | null = null;
+
+  if (session.status === "review") {
+    const curQ = sortedQs[session.current_question_index];
+    if (curQ) {
+      const { data: statsRaw, error: rpcErr } = await admin.rpc(
+        "compute_question_stats",
+        {
+          p_session_id: id,
+          p_question_id: curQ.id,
+        }
+      );
+      if (!rpcErr && statsRaw != null) {
+        const correctOpt = curQ.answer_options.find((o) => o.is_correct);
+        review = {
+          stats: statsRaw as unknown as ReviewStats,
+          correct_option_text: correctOpt?.text ?? null,
+          is_last_question: session.current_question_index >= sortedQs.length - 1,
+        };
+      }
+    }
+  }
+
+  let final_leaderboard:
+    | {
+        rank: number;
+        player_id: string;
+        nickname: string;
+        total_points: number;
+      }[]
+    | undefined;
+
+  if (session.status === "finished") {
+    const { data: leaderboard } = await admin
+      .from("session_players")
+      .select("id, nickname, total_points")
+      .eq("session_id", id)
+      .eq("is_active", true)
+      .order("total_points", { ascending: false });
+    final_leaderboard = (leaderboard ?? []).map((p, i) => ({
+      rank: i + 1,
+      player_id: p.id,
+      nickname: p.nickname,
+      total_points: p.total_points,
+    }));
+  }
+
   return NextResponse.json(
     {
       session: {
@@ -81,6 +134,8 @@ export async function GET(
         finished_at: session.finished_at,
         created_at: session.created_at,
         quiz: safeQuiz,
+        review,
+        final_leaderboard,
       },
     },
     {

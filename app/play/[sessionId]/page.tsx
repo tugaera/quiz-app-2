@@ -62,13 +62,52 @@ export default function PlayPage() {
     });
     if (!res.ok) return;
     const json = await res.json();
-    const s = json.session;
+    const s = json.session as {
+      join_code: string;
+      status: SessionStatus;
+      current_question_index: number;
+      question_started_at: string | null;
+      quiz: QuizSanitized;
+      review?: {
+        stats: ReviewStats;
+        correct_option_text: string | null;
+        is_last_question: boolean;
+      } | null;
+      final_leaderboard?: typeof finalLb;
+    };
     if (!s?.quiz?.questions?.length) return;
     setQuiz(s.quiz);
     setJoinCode(s.join_code);
     setPhase(s.status);
 
+    if (s.status === "finished") {
+      if (Array.isArray(s.final_leaderboard)) {
+        setFinalLb(s.final_leaderboard);
+      }
+      setServerPayload(null);
+      setReviewStats(null);
+      setLastReviewMeta(null);
+      setReviewCorrectText(null);
+      return;
+    }
+
+    if (s.status === "review") {
+      setServerPayload(null);
+      if (s.review) {
+        setReviewStats(s.review.stats);
+        setReviewCorrectText(s.review.correct_option_text ?? null);
+        setLastReviewMeta({
+          questionIndex: s.current_question_index,
+          isLast: s.review.is_last_question,
+        });
+      }
+      return;
+    }
+
     if (s.status === "question" && s.question_started_at) {
+      setReviewStats(null);
+      setLastReviewMeta(null);
+      setReviewCorrectText(null);
       const q = getQuestionByIndex(s.quiz, s.current_question_index);
       if (q) {
         setServerPayload({
@@ -80,9 +119,13 @@ export default function PlayPage() {
       } else {
         setServerPayload(null);
       }
-    } else {
-      setServerPayload(null);
+      return;
     }
+
+    setServerPayload(null);
+    setReviewStats(null);
+    setLastReviewMeta(null);
+    setReviewCorrectText(null);
   }, [sessionId]);
 
   useEffect(() => {
@@ -94,6 +137,15 @@ export default function PlayPage() {
   useEffect(() => {
     sync();
   }, [sync]);
+
+  /** Host has sequential-tick; players only had Realtime+broadcast — easy to miss Q2. Poll during live play. */
+  useEffect(() => {
+    if (phase !== "question" && phase !== "review") return;
+    const tick = window.setInterval(() => {
+      void sync();
+    }, 2000);
+    return () => window.clearInterval(tick);
+  }, [phase, sync]);
 
   useEffect(() => {
     const channel = supabase
@@ -224,7 +276,7 @@ export default function PlayPage() {
       serverPayload?.serverTs ?? new Date().toISOString(),
     timeLimitSecs: serverPayload?.timeLimitSecs ?? 10,
     onExpire: () => {
-      if (phase !== "question") return;
+      if (phaseRef.current !== "question") return;
       if (selectedOption) setAnsweredOverlay(true);
       else setTimeUpOverlay(true);
       window.setTimeout(() => {
