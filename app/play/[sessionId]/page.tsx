@@ -55,6 +55,9 @@ export default function PlayPage() {
     ReturnType<typeof createClient>["channel"]
   > | null>(null);
 
+  /** Stable unique key per mount so players don't share one Realtime presence slot. */
+  const presenceKeyRef = useRef<string | null>(null);
+
   const sync = useCallback(async () => {
     if (!sessionId) return;
     const res = await fetch(`/api/sessions/${sessionId}`, {
@@ -76,9 +79,10 @@ export default function PlayPage() {
       final_leaderboard?: typeof finalLb;
     };
     if (!s?.quiz?.questions?.length) return;
-    setQuiz(s.quiz);
-    setJoinCode(s.join_code);
-    setPhase(s.status);
+
+    setQuiz((prev) => (prev?.id === s.quiz.id ? prev : s.quiz));
+    setJoinCode((prev) => (prev === s.join_code ? prev : s.join_code));
+    setPhase((prev) => (prev === s.status ? prev : s.status));
 
     if (s.status === "finished") {
       if (Array.isArray(s.final_leaderboard)) {
@@ -110,11 +114,21 @@ export default function PlayPage() {
       setReviewCorrectText(null);
       const q = getQuestionByIndex(s.quiz, s.current_question_index);
       if (q) {
-        setServerPayload({
-          serverTs: new Date().toISOString(),
-          questionStartedAt: s.question_started_at,
-          timeLimitSecs: q.time_limit_secs,
-          questionIndex: s.current_question_index,
+        setServerPayload((prev) => {
+          if (
+            prev &&
+            prev.questionIndex === s.current_question_index &&
+            prev.questionStartedAt === s.question_started_at &&
+            prev.timeLimitSecs === q.time_limit_secs
+          ) {
+            return prev;
+          }
+          return {
+            serverTs: new Date().toISOString(),
+            questionStartedAt: s.question_started_at,
+            timeLimitSecs: q.time_limit_secs,
+            questionIndex: s.current_question_index,
+          };
         });
       } else {
         setServerPayload(null);
@@ -138,21 +152,28 @@ export default function PlayPage() {
     sync();
   }, [sync]);
 
-  /** Host has sequential-tick; players only had Realtime+broadcast — easy to miss Q2. Poll during live play. */
+  /** Backup if a broadcast is missed; interval kept moderate to avoid resetting UI every tick. */
   useEffect(() => {
     if (phase !== "question" && phase !== "review") return;
     const tick = window.setInterval(() => {
       void sync();
-    }, 2000);
+    }, 5000);
     return () => window.clearInterval(tick);
   }, [phase, sync]);
 
   useEffect(() => {
+    if (!presenceKeyRef.current) {
+      presenceKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `p-${sessionId}-${Math.random().toString(36).slice(2)}`;
+    }
+
     const channel = supabase
       .channel(`session:${sessionId}`, {
         config: {
           broadcast: { ack: false },
-          presence: { key: "player" },
+          presence: { key: presenceKeyRef.current },
         },
       })
       .on(

@@ -50,7 +50,7 @@ export default function HostSessionPage() {
   >([]);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    const res = await fetch(`/api/sessions/${sessionId}`, { cache: "no-store" });
     if (!res.ok) return;
     const json = await res.json();
     const s = json.session;
@@ -111,6 +111,7 @@ export default function HostSessionPage() {
                   ...prev,
                   status: "question",
                   question_started_at: p.question_started_at,
+                  current_question_index: p.question_index,
                 }
               : prev
           );
@@ -132,7 +133,15 @@ export default function HostSessionPage() {
             is_last_question: boolean;
             question_index: number;
           };
-          setSession((prev) => (prev ? { ...prev, status: "review" } : prev));
+          setSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: "review",
+                  current_question_index: p.question_index,
+                }
+              : prev
+          );
           setReviewStats(p.stats);
           setReviewMeta({
             isLast: p.is_last_question,
@@ -165,16 +174,22 @@ export default function HostSessionPage() {
       )
       .on("presence", { event: "sync" }, () => {
         const state = ch.presenceState();
-        const rows: { player_id: string; nickname: string }[] = [];
+        const byPlayer = new Map<
+          string,
+          { player_id: string; nickname: string }
+        >();
         Object.values(state).forEach((entries) => {
           entries.forEach((e: unknown) => {
             const m = e as { player_id?: string; nickname?: string };
             if (m.player_id && m.player_id !== "host") {
-              rows.push({ player_id: m.player_id, nickname: m.nickname ?? "?" });
+              byPlayer.set(m.player_id, {
+                player_id: m.player_id,
+                nickname: m.nickname ?? "?",
+              });
             }
           });
         });
-        setPresencePlayers(rows);
+        setPresencePlayers(Array.from(byPlayer.values()));
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -231,7 +246,10 @@ export default function HostSessionPage() {
   });
 
   async function start() {
-    await fetch(`/api/sessions/${sessionId}/start`, { method: "POST" });
+    const res = await fetch(`/api/sessions/${sessionId}/start`, {
+      method: "POST",
+    });
+    if (res.ok) await load();
   }
 
   async function reveal() {
