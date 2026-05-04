@@ -47,6 +47,13 @@ export default function PlayPage() {
   const [reconnecting, setReconnecting] = useState(false);
   const playerIdRef = useRef<string | null>(null);
   const [nickname, setNickname] = useState("");
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
+  const nicknameRef = useRef(nickname);
+  nicknameRef.current = nickname;
+  const sessionChannelRef = useRef<ReturnType<
+    ReturnType<typeof createClient>["channel"]
+  > | null>(null);
 
   const sync = useCallback(async () => {
     const res = await fetch(`/api/sessions/${sessionId}`);
@@ -84,7 +91,12 @@ export default function PlayPage() {
 
   useEffect(() => {
     const channel = supabase
-      .channel(`session:${sessionId}`)
+      .channel(`session:${sessionId}`, {
+        config: {
+          broadcast: { ack: false },
+          presence: { key: "player" },
+        },
+      })
       .on(
         "broadcast",
         { event: "session:question" },
@@ -139,12 +151,24 @@ export default function PlayPage() {
           setFinalLb(p.final_leaderboard);
         }
       )
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           setReconnecting(true);
         }
         if (status === "SUBSCRIBED") {
           setReconnecting(false);
+          sessionChannelRef.current = channel;
+          const id = playerIdRef.current;
+          if (
+            id &&
+            (phaseRef.current === "waiting" || phaseRef.current === "loading")
+          ) {
+            await channel.track({
+              player_id: id,
+              nickname: nicknameRef.current || "Player",
+              joined_at: new Date().toISOString(),
+            });
+          }
         }
       });
 
@@ -165,27 +189,23 @@ export default function PlayPage() {
       .subscribe();
 
     return () => {
+      sessionChannelRef.current = null;
       supabase.removeChannel(channel);
       supabase.removeChannel(dbCh);
     };
   }, [sessionId, supabase, sync]);
 
   useEffect(() => {
-    if (phase !== "waiting" && phase !== "loading") return;
-    const ch = supabase.channel(`session:${sessionId}`);
-    ch.subscribe(async (status) => {
-      if (status === "SUBSCRIBED" && playerIdRef.current) {
-        await ch.track({
-          player_id: playerIdRef.current,
-          nickname,
-          joined_at: new Date().toISOString(),
-        });
-      }
+    const ch = sessionChannelRef.current;
+    if (!ch || (phase !== "waiting" && phase !== "loading")) return;
+    const id = playerIdRef.current;
+    if (!id) return;
+    void ch.track({
+      player_id: id,
+      nickname: nickname || "Player",
+      joined_at: new Date().toISOString(),
     });
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [phase, sessionId, supabase, nickname]);
+  }, [phase, nickname, sessionId]);
 
   const currentQuestion = useMemo(() => {
     if (!quiz || !serverPayload) return null;

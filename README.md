@@ -53,6 +53,8 @@ Sequential mode schedules timer expiry via the `advance-question` function (self
 3. Set `NEXT_PUBLIC_APP_URL` to your production URL (used for QR codes and join links).
 4. Deploy Supabase Edge Function `advance-question` to the same Supabase project referenced by env vars.
 
+**If you see `500` / `MIDDLEWARE_INVOCATION_FAILED`:** Middleware needs **`NEXT_PUBLIC_SUPABASE_URL`** and **`NEXT_PUBLIC_SUPABASE_ANON_KEY`**. In Vercel → **Settings → Environment Variables**, add them for **Production** and **Preview** (and **Development** if you use `vercel dev`). Redeploy after saving. Values must match your Supabase project (**Settings → API**).
+
 ## Security notes
 
 - Player-facing reads use `GET /api/sessions/[id]` so correct answers are not exposed until the review broadcast.

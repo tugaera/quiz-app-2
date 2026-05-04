@@ -89,7 +89,12 @@ export default function HostSessionPage() {
 
   useEffect(() => {
     const ch = supabase
-      .channel(`session:${sessionId}`)
+      .channel(`session:${sessionId}`, {
+        config: {
+          broadcast: { ack: false },
+          presence: { key: "host" },
+        },
+      })
       .on(
         "broadcast",
         { event: "session:question" },
@@ -102,7 +107,11 @@ export default function HostSessionPage() {
           };
           setSession((prev) =>
             prev
-              ? { ...prev, status: "question", question_started_at: p.question_started_at }
+              ? {
+                  ...prev,
+                  status: "question",
+                  question_started_at: p.question_started_at,
+                }
               : prev
           );
           setServerPayload({
@@ -144,12 +153,34 @@ export default function HostSessionPage() {
         "broadcast",
         { event: "answers:updated" },
         ({ payload }: { payload: Record<string, unknown> }) => {
-          const p = payload as { answered_count?: number; total_players?: number };
-          if (typeof p.answered_count === "number") setAnswered(p.answered_count);
-          if (typeof p.total_players === "number") setTotalPlayers(p.total_players);
+          const p = payload as {
+            answered_count?: number;
+            total_players?: number;
+          };
+          if (typeof p.answered_count === "number")
+            setAnswered(p.answered_count);
+          if (typeof p.total_players === "number")
+            setTotalPlayers(p.total_players);
         }
       )
-      .subscribe();
+      .on("presence", { event: "sync" }, () => {
+        const state = ch.presenceState();
+        const rows: { player_id: string; nickname: string }[] = [];
+        Object.values(state).forEach((entries) => {
+          entries.forEach((e: unknown) => {
+            const m = e as { player_id?: string; nickname?: string };
+            if (m.player_id && m.player_id !== "host") {
+              rows.push({ player_id: m.player_id, nickname: m.nickname ?? "?" });
+            }
+          });
+        });
+        setPresencePlayers(rows);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await ch.track({ player_id: "host", nickname: "Host" });
+        }
+      });
 
     const dbCh = supabase
       .channel(`session-db-host:${sessionId}`)
@@ -172,36 +203,6 @@ export default function HostSessionPage() {
       supabase.removeChannel(dbCh);
     };
   }, [sessionId, supabase, load]);
-
-  useEffect(() => {
-    if (!session || session.status !== "waiting") return;
-    const ch = supabase.channel(`session:${sessionId}`, {
-      config: {
-        presence: { key: "host" },
-      },
-    });
-    ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState();
-      const rows: { player_id: string; nickname: string }[] = [];
-      Object.values(state).forEach((entries) => {
-        entries.forEach((e: unknown) => {
-          const m = e as { player_id?: string; nickname?: string };
-          if (m.player_id && m.player_id !== "host") {
-            rows.push({ player_id: m.player_id, nickname: m.nickname ?? "?" });
-          }
-        });
-      });
-      setPresencePlayers(rows);
-    });
-    ch.subscribe(async (status) => {
-      if (status === "SUBSCRIBED") {
-        await ch.track({ player_id: "host", nickname: "Host" });
-      }
-    });
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [session, sessionId, supabase]);
 
   const cq = useMemo(() => {
     if (!session || !serverPayload) return null;
