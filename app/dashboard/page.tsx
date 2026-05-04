@@ -61,13 +61,26 @@ export default function DashboardPage() {
         .limit(15);
       if (!cancel && data) {
         setOpenSessions(
-          data as {
-            id: string;
-            join_code: string;
-            status: string;
-            quiz_id: string;
-            quiz: { title: string } | null;
-          }[]
+          data.map((row) => {
+            const raw = row.quiz as
+              | { title: string }
+              | { title: string }[]
+              | null
+              | undefined;
+            const quiz =
+              raw == null
+                ? null
+                : Array.isArray(raw)
+                  ? (raw[0] ?? null)
+                  : raw;
+            return {
+              id: row.id as string,
+              join_code: row.join_code as string,
+              status: row.status as string,
+              quiz_id: row.quiz_id as string,
+              quiz,
+            };
+          })
         );
       }
     })();

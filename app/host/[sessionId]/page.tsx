@@ -217,7 +217,7 @@ export default function HostSessionPage() {
     run();
     const t = setInterval(run, 2000);
     return () => clearInterval(t);
-  }, [sessionId, session?.quiz.type, session?.status]);
+  }, [session, sessionId, session?.quiz.type, session?.status]);
 
   const cq = useMemo(() => {
     if (!session || !serverPayload) return null;
