@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -49,11 +49,26 @@ export default function HostSessionPage() {
     { player_id: string; nickname: string }[]
   >([]);
 
+  const sessionRef = useRef<typeof session>(null);
+  sessionRef.current = session;
+
   const load = useCallback(async () => {
     const res = await fetch(`/api/sessions/${sessionId}`, { cache: "no-store" });
     if (!res.ok) return;
     const json = await res.json();
     const s = json.session;
+
+    if (s.status === "waiting") {
+      const cur = sessionRef.current;
+      if (
+        cur?.status === "question" ||
+        cur?.status === "review" ||
+        cur?.status === "finished"
+      ) {
+        return;
+      }
+    }
+
     setSession({
       status: s.status,
       join_code: s.join_code,

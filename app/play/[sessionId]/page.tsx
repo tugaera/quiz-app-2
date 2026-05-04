@@ -58,19 +58,29 @@ export default function PlayPage() {
   /** Stable unique key per mount so players don't share one Realtime presence slot. */
   const presenceKeyRef = useRef<string | null>(null);
 
-  /** Drop stale HTTP responses so an older "waiting" payload can't overwrite a newer "question". */
-  const syncRequestIdRef = useRef(0);
+  /** Drop stale HTTP responses; abort previous fetch so completions are ordered. */
+  const syncAbortRef = useRef<AbortController | null>(null);
 
   const sync = useCallback(async () => {
     if (!sessionId) return;
-    const myRequest = ++syncRequestIdRef.current;
-    const res = await fetch(`/api/sessions/${sessionId}`, {
-      cache: "no-store",
-    });
-    if (myRequest !== syncRequestIdRef.current) return;
+    syncAbortRef.current?.abort();
+    const ac = new AbortController();
+    syncAbortRef.current = ac;
+
+    let res: Response;
+    try {
+      res = await fetch(`/api/sessions/${sessionId}`, {
+        cache: "no-store",
+        signal: ac.signal,
+      });
+    } catch (e: unknown) {
+      const name = e instanceof Error ? e.name : "";
+      if (name === "AbortError") return;
+      throw e;
+    }
+
     if (!res.ok) return;
     const json = await res.json();
-    if (myRequest !== syncRequestIdRef.current) return;
     const s = json.session as {
       join_code: string;
       status: SessionStatus;
@@ -85,6 +95,12 @@ export default function PlayPage() {
       final_leaderboard?: typeof finalLb;
     };
     if (!s?.quiz?.questions?.length) return;
+
+    /* Never let a stale "waiting" body clobber an in-progress game (fixes out-of-order HTTP). */
+    if (s.status === "waiting") {
+      const p = phaseRef.current;
+      if (p === "question" || p === "review" || p === "finished") return;
+    }
 
     setQuiz((prev) => (prev?.id === s.quiz.id ? prev : s.quiz));
     setJoinCode((prev) => (prev === s.join_code ? prev : s.join_code));

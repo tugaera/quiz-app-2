@@ -6,6 +6,7 @@ import {
 import { invokeAdvanceQuestion } from "@/lib/edge/advanceQuestion";
 import { broadcastSessionMessage } from "@/lib/realtime/sessionChannel";
 import type { QuizWithQuestions } from "@/lib/types/database";
+import { unwrapEmbeddedQuiz } from "@/lib/utils/sessionQuiz";
 
 export async function POST(
   _req: Request,
@@ -46,12 +47,13 @@ export async function POST(
     return NextResponse.json({ error: "Already started" }, { status: 409 });
   }
 
-  const quiz = session.quiz as unknown as QuizWithQuestions;
-  const sorted = [...quiz.questions].sort((a, b) => a.position - b.position);
-  if (sorted.length === 0) {
-    return NextResponse.json({ error: "Quiz has no questions" }, { status: 400 });
+  const quiz = unwrapEmbeddedQuiz(
+    session.quiz as unknown as QuizWithQuestions | QuizWithQuestions[] | null
+  );
+  if (!quiz?.questions?.length) {
+    return NextResponse.json({ error: "Invalid session quiz" }, { status: 500 });
   }
-
+  const sorted = [...quiz.questions].sort((a, b) => a.position - b.position);
   const first = sorted[0]!;
   const server_ts = new Date().toISOString();
 
