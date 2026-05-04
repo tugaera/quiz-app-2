@@ -32,6 +32,7 @@ export default function PlayPage() {
   const [reviewCorrectText, setReviewCorrectText] = useState<string | null>(
     null
   );
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [lastReviewMeta, setLastReviewMeta] = useState<{
     questionIndex: number;
     isLast: boolean;

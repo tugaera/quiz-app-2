@@ -14,13 +14,6 @@ export function useServerAnchoredTimer(opts: Opts) {
   const onExpire = useRef(opts.onExpire);
   onExpire.current = opts.onExpire;
 
-  const computeInitial = () => {
-    if (!opts.questionStartedAtIso) return opts.timeLimitSecs * 1000;
-    const elapsed =
-      Date.parse(opts.serverAnchorIso) - Date.parse(opts.questionStartedAtIso);
-    return Math.max(0, opts.timeLimitSecs * 1000 - elapsed);
-  };
-
   const [remainingMs, setRemainingMs] = useState(() => {
     if (!opts.questionStartedAtIso) return opts.timeLimitSecs * 1000;
     const elapsed =
@@ -29,7 +22,14 @@ export function useServerAnchoredTimer(opts: Opts) {
   });
 
   useEffect(() => {
-    const rem0 = computeInitial();
+    const rem0 = !opts.questionStartedAtIso
+      ? opts.timeLimitSecs * 1000
+      : Math.max(
+          0,
+          opts.timeLimitSecs * 1000 -
+            (Date.parse(opts.serverAnchorIso) -
+              Date.parse(opts.questionStartedAtIso))
+        );
     setRemainingMs(rem0);
     let expired = false;
     if (rem0 <= 0) {

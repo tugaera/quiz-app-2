@@ -4,7 +4,6 @@ import {
   createServiceRoleClient,
 } from "@/lib/supabase/server";
 import { invokeAdvanceQuestion } from "@/lib/edge/advanceQuestion";
-import { broadcastSessionMessage } from "@/lib/realtime/sessionChannel";
 import type { QuizWithQuestions } from "@/lib/types/database";
 
 export async function POST(

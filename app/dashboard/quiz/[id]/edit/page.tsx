@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +9,6 @@ import type { QuestionWithOptions, Quiz } from "@/lib/types/database";
 export default function EditQuizPage() {
   const params = useParams();
   const id = String(params.id ?? "");
-  const router = useRouter();
   const supabase = createClient();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
@@ -22,7 +21,7 @@ export default function EditQuizPage() {
   const [correct, setCorrect] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const { data: q } = await supabase.from("quizzes").select("*").eq("id", id).single();
     if (q) setQuiz(q as Quiz);
     const { data: qs } = await supabase
@@ -39,11 +38,11 @@ export default function EditQuizPage() {
           ),
         }))
       );
-  }
+  }, [id, supabase]);
 
   useEffect(() => {
-    refresh();
-  }, [id]);
+    void refresh();
+  }, [refresh]);
 
   async function addQuestion(e: React.FormEvent) {
     e.preventDefault();
