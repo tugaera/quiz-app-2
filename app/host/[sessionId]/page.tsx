@@ -204,6 +204,21 @@ export default function HostSessionPage() {
     };
   }, [sessionId, supabase, load]);
 
+  /** Sequential mode: Edge background timers are unreliable without waitUntil; nudge transitions from the host tab. */
+  useEffect(() => {
+    if (!session || session.quiz.type !== "sequential") return;
+    if (session.status !== "question" && session.status !== "review") return;
+
+    const run = () => {
+      void fetch(`/api/sessions/${sessionId}/sequential-tick`, {
+        method: "POST",
+      });
+    };
+    run();
+    const t = setInterval(run, 2000);
+    return () => clearInterval(t);
+  }, [sessionId, session?.quiz.type, session?.status]);
+
   const cq = useMemo(() => {
     if (!session || !serverPayload) return null;
     return getQuestionByIndex(session.quiz, serverPayload.questionIndex);

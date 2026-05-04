@@ -8,6 +8,15 @@ import type { Quiz } from "@/lib/types/database";
 export default function DashboardPage() {
   const supabase = createClient();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [openSessions, setOpenSessions] = useState<
+    {
+      id: string;
+      join_code: string;
+      status: string;
+      quiz_id: string;
+      quiz: { title: string } | null;
+    }[]
+  >([]);
 
   useEffect(() => {
     let cancel = false;
@@ -22,6 +31,45 @@ export default function DashboardPage() {
         .eq("host_id", user.id)
         .order("updated_at", { ascending: false });
       if (!cancel && data) setQuizzes(data as Quiz[]);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("sessions")
+        .select(
+          `
+          id,
+          join_code,
+          status,
+          quiz_id,
+          quiz:quizzes ( title )
+        `
+        )
+        .eq("host_id", user.id)
+        .neq("status", "finished")
+        .order("created_at", { ascending: false })
+        .limit(15);
+      if (!cancel && data) {
+        setOpenSessions(
+          data as {
+            id: string;
+            join_code: string;
+            status: string;
+            quiz_id: string;
+            quiz: { title: string } | null;
+          }[]
+        );
+      }
     })();
     return () => {
       cancel = true;
@@ -52,6 +100,42 @@ export default function DashboardPage() {
       >
         New quiz
       </Link>
+
+      {openSessions.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-lg font-semibold mb-2">Resume hosting</h2>
+          <p className="text-sm text-neutral-600 mb-3">
+            Open sessions you can return to (lobby or live game).
+          </p>
+          <ul className="space-y-2">
+            {openSessions.map((s) => (
+              <li
+                key={s.id}
+                className="border rounded-lg p-3 flex flex-wrap justify-between items-center gap-2 text-sm"
+              >
+                <div>
+                  <span className="font-medium">
+                    {s.quiz?.title ?? "Quiz"}
+                  </span>
+                  <span className="text-neutral-500 mx-2">·</span>
+                  <span className="font-mono">{s.join_code}</span>
+                  <span className="text-neutral-500 mx-2">
+                    {s.status.replace("_", " ")}
+                  </span>
+                </div>
+                <Link
+                  href={`/host/${s.id}`}
+                  className="rounded-md bg-violet-600 text-white px-3 py-1 text-sm font-medium"
+                >
+                  {s.status === "waiting" ? "Resume lobby" : "Open host screen"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <h2 className="text-lg font-semibold mb-3">Your quizzes</h2>
       <ul className="space-y-3">
         {quizzes.map((q) => (
           <li

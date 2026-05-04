@@ -78,10 +78,13 @@ export async function POST(
   });
 
   if (quiz.type === "sequential") {
-    await invokeAdvanceQuestion({
+    const invoked = await invokeAdvanceQuestion({
       session_id: id,
       action: "schedule_question_end",
     });
+    if (!invoked.ok) {
+      console.error("[start] schedule_question_end failed:", invoked);
+    }
   }
 
   return NextResponse.json({ ok: true });

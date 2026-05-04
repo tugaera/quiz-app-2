@@ -56,6 +56,25 @@ function sortQuestions(
   return [...q].sort((a, b) => a.position - b.position);
 }
 
+function fnHeaders(serviceKey: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${serviceKey}`,
+    apikey: serviceKey,
+  };
+}
+
+/** Supabase Edge injects EdgeRuntime.waitUntil; without it, fire-and-forget may be killed. */
+function runInBackground(promise: Promise<unknown>): void {
+  const ER = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } })
+    .EdgeRuntime;
+  if (ER?.waitUntil) {
+    ER.waitUntil(promise);
+  } else {
+    void promise;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors });
@@ -106,21 +125,12 @@ Deno.serve(async (req) => {
         await new Promise((r) => setTimeout(r, wait));
         await fetch(fnUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
+          headers: fnHeaders(serviceKey),
           body: JSON.stringify({ session_id, action: "expire_question" }),
         });
       };
 
-      // @ts-expect-error EdgeRuntime in Supabase Edge
-      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
-        // @ts-expect-error EdgeRuntime
-        EdgeRuntime.waitUntil(run());
-      } else {
-        run();
-      }
+      runInBackground(run());
 
       return new Response(JSON.stringify({ ok: true, scheduled_ms: wait }), {
         headers: { ...cors, "Content-Type": "application/json" },
@@ -210,20 +220,11 @@ Deno.serve(async (req) => {
           await new Promise((r) => setTimeout(r, reviewWait));
           await fetch(fnUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${serviceKey}`,
-            },
+            headers: fnHeaders(serviceKey),
             body: JSON.stringify({ session_id, action: "end_review" }),
           });
         };
-        // @ts-expect-error EdgeRuntime
-        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
-          // @ts-expect-error EdgeRuntime
-          EdgeRuntime.waitUntil(runLater());
-        } else {
-          runLater();
-        }
+        runInBackground(runLater());
       }
 
       return new Response(JSON.stringify({ ok: true }), {
@@ -333,23 +334,14 @@ Deno.serve(async (req) => {
       const arm = async () => {
         await fetch(fnUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
+          headers: fnHeaders(serviceKey),
           body: JSON.stringify({
             session_id,
             action: "schedule_question_end",
           }),
         });
       };
-      // @ts-expect-error EdgeRuntime
-      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
-        // @ts-expect-error EdgeRuntime
-        EdgeRuntime.waitUntil(arm());
-      } else {
-        arm();
-      }
+      runInBackground(arm());
 
       return new Response(JSON.stringify({ ok: true, next: nextIdx }), {
         headers: { ...cors, "Content-Type": "application/json" },

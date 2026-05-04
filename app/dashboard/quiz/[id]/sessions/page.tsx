@@ -47,11 +47,9 @@ export default function QuizSessionsPage() {
               <span className="text-neutral-500">{r.status}</span>
             </div>
             <div className="flex gap-3">
-              {r.status !== "waiting" && (
-                <Link href={`/host/${r.id}`} className="underline">
-                  Host view
-                </Link>
-              )}
+              <Link href={`/host/${r.id}`} className="underline">
+                {r.status === "waiting" ? "Resume lobby" : "Host view"}
+              </Link>
             </div>
           </li>
         ))}

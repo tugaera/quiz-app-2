@@ -44,7 +44,7 @@ Real-time multiplayer quiz platform (Next.js 14, Supabase, Vercel) with host pro
 - **Host:** `/login` → `/dashboard` → create quiz → **Host live** → `/host/[sessionId]`.
 - **Players:** `/join/[code]` → `/play/[sessionId]`.
 
-Sequential mode schedules timer expiry via the `advance-question` function (self-chaining with `EdgeRuntime.waitUntil`). You can also use pg_cron + `net.http_post` (see migration `004` notes) if you prefer database-owned schedules.
+Sequential mode uses the Supabase `advance-question` Edge Function for timer transitions. Deploy it and set `SUPABASE_SERVICE_ROLE_KEY` on Vercel. The host screen also calls `POST /api/sessions/[id]/sequential-tick` every few seconds during `question` / `review` so the game still advances if background `setTimeout` in the Edge runtime is dropped. You can also use pg_cron + `net.http_post` (see migration `004` notes).
 
 ## Deploy (Vercel)
 
