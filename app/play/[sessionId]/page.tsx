@@ -58,13 +58,19 @@ export default function PlayPage() {
   /** Stable unique key per mount so players don't share one Realtime presence slot. */
   const presenceKeyRef = useRef<string | null>(null);
 
+  /** Drop stale HTTP responses so an older "waiting" payload can't overwrite a newer "question". */
+  const syncRequestIdRef = useRef(0);
+
   const sync = useCallback(async () => {
     if (!sessionId) return;
+    const myRequest = ++syncRequestIdRef.current;
     const res = await fetch(`/api/sessions/${sessionId}`, {
       cache: "no-store",
     });
+    if (myRequest !== syncRequestIdRef.current) return;
     if (!res.ok) return;
     const json = await res.json();
+    if (myRequest !== syncRequestIdRef.current) return;
     const s = json.session as {
       join_code: string;
       status: SessionStatus;
@@ -191,11 +197,25 @@ export default function PlayPage() {
           setSelectedOption(null);
           setAnsweredOverlay(false);
           setTimeUpOverlay(false);
-          setServerPayload({
-            serverTs: p.server_ts,
-            questionStartedAt: p.question_started_at,
-            timeLimitSecs: p.time_limit_secs,
-            questionIndex: p.question_index,
+          setReviewStats(null);
+          setLastReviewMeta(null);
+          setReviewCorrectText(null);
+          setServerPayload((prev) => {
+            if (
+              prev &&
+              prev.questionIndex === p.question_index &&
+              prev.questionStartedAt === p.question_started_at &&
+              prev.timeLimitSecs === p.time_limit_secs &&
+              prev.serverTs === p.server_ts
+            ) {
+              return prev;
+            }
+            return {
+              serverTs: p.server_ts,
+              questionStartedAt: p.question_started_at,
+              timeLimitSecs: p.time_limit_secs,
+              questionIndex: p.question_index,
+            };
           });
         }
       )
@@ -211,6 +231,7 @@ export default function PlayPage() {
             correct_option_text?: string | null;
           };
           setPhase("review");
+          setServerPayload(null);
           setReviewStats(p.stats);
           setReviewCorrectText(p.correct_option_text ?? null);
           setLastReviewMeta({
@@ -293,8 +314,7 @@ export default function PlayPage() {
 
   const remainingMs = useServerAnchoredTimer({
     questionStartedAtIso: serverPayload?.questionStartedAt ?? null,
-    serverAnchorIso:
-      serverPayload?.serverTs ?? new Date().toISOString(),
+    serverAnchorIso: serverPayload?.serverTs ?? "",
     timeLimitSecs: serverPayload?.timeLimitSecs ?? 10,
     onExpire: () => {
       if (phaseRef.current !== "question") return;
@@ -338,7 +358,7 @@ export default function PlayPage() {
           Reconnecting…
         </div>
       )}
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="sync">
         {(phase === "waiting" || phase === "loading") && (
           <motion.div
             key="wait"

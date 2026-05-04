@@ -13,30 +13,43 @@ type Opts = {
 export function useServerAnchoredTimer(opts: Opts) {
   const onExpire = useRef(opts.onExpire);
   onExpire.current = opts.onExpire;
+  /** Avoid firing onExpire on every effect re-run when the round is already over. */
+  const expiredKeyRef = useRef<string | null>(null);
 
   const [remainingMs, setRemainingMs] = useState(() => {
     if (!opts.questionStartedAtIso) return opts.timeLimitSecs * 1000;
     const elapsed =
       Date.parse(opts.serverAnchorIso) - Date.parse(opts.questionStartedAtIso);
+    if (!Number.isFinite(elapsed)) return opts.timeLimitSecs * 1000;
     return Math.max(0, opts.timeLimitSecs * 1000 - elapsed);
   });
 
+  const startedAt = opts.questionStartedAtIso;
+  const anchorDep = startedAt ? opts.serverAnchorIso : "";
+
   useEffect(() => {
-    const rem0 = !opts.questionStartedAtIso
-      ? opts.timeLimitSecs * 1000
-      : Math.max(
-          0,
-          opts.timeLimitSecs * 1000 -
-            (Date.parse(opts.serverAnchorIso) -
-              Date.parse(opts.questionStartedAtIso))
-        );
-    setRemainingMs(rem0);
-    let expired = false;
-    if (rem0 <= 0) {
-      onExpire.current?.();
-      expired = true;
+    const roundKey = startedAt
+      ? `${startedAt}|${opts.timeLimitSecs}`
+      : "";
+
+    let rem0: number;
+    if (!startedAt) {
+      rem0 = opts.timeLimitSecs * 1000;
+    } else {
+      const elapsed = Date.parse(anchorDep) - Date.parse(startedAt);
+      rem0 = Number.isFinite(elapsed)
+        ? Math.max(0, opts.timeLimitSecs * 1000 - elapsed)
+        : opts.timeLimitSecs * 1000;
     }
-    if (expired) return;
+    setRemainingMs(rem0);
+    if (rem0 <= 0) {
+      if (startedAt && expiredKeyRef.current !== roundKey) {
+        expiredKeyRef.current = roundKey;
+        onExpire.current?.();
+      }
+      return;
+    }
+    expiredKeyRef.current = null;
 
     let frame = 0;
     const t0 = performance.now();
@@ -44,18 +57,17 @@ export function useServerAnchoredTimer(opts: Opts) {
       const next = Math.max(0, rem0 - (performance.now() - t0));
       setRemainingMs(next);
       if (next <= 0) {
-        onExpire.current?.();
+        if (expiredKeyRef.current !== roundKey) {
+          expiredKeyRef.current = roundKey;
+          onExpire.current?.();
+        }
         return;
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [
-    opts.questionStartedAtIso,
-    opts.serverAnchorIso,
-    opts.timeLimitSecs,
-  ]);
+  }, [startedAt, anchorDep, opts.timeLimitSecs]);
 
   return remainingMs;
 }

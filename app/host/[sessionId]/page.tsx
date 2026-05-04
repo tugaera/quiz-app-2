@@ -241,7 +241,7 @@ export default function HostSessionPage() {
 
   const remainingMs = useServerAnchoredTimer({
     questionStartedAtIso: serverPayload?.questionStartedAt ?? null,
-    serverAnchorIso: serverPayload?.serverTs ?? new Date().toISOString(),
+    serverAnchorIso: serverPayload?.serverTs ?? "",
     timeLimitSecs: serverPayload?.timeLimitSecs ?? 10,
   });
 
