@@ -56,18 +56,20 @@ export default function PlayPage() {
   > | null>(null);
 
   const sync = useCallback(async () => {
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    if (!sessionId) return;
+    const res = await fetch(`/api/sessions/${sessionId}`, {
+      cache: "no-store",
+    });
     if (!res.ok) return;
     const json = await res.json();
     const s = json.session;
+    if (!s?.quiz?.questions?.length) return;
     setQuiz(s.quiz);
     setJoinCode(s.join_code);
     setPhase(s.status);
+
     if (s.status === "question" && s.question_started_at) {
-      const qs = [...s.quiz.questions].sort(
-        (a: { position: number }, b: { position: number }) => a.position - b.position
-      );
-      const q = qs[s.current_question_index];
+      const q = getQuestionByIndex(s.quiz, s.current_question_index);
       if (q) {
         setServerPayload({
           serverTs: new Date().toISOString(),
@@ -75,7 +77,11 @@ export default function PlayPage() {
           timeLimitSecs: q.time_limit_secs,
           questionIndex: s.current_question_index,
         });
+      } else {
+        setServerPayload(null);
       }
+    } else {
+      setServerPayload(null);
     }
   }, [sessionId]);
 

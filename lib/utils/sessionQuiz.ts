@@ -1,5 +1,13 @@
 import type { QuizSanitized, QuizWithQuestions } from "@/lib/types/database";
 
+/** PostgREST / Supabase may return an embedded many-to-one row as T or T[]. */
+export function unwrapEmbeddedQuiz(
+  raw: QuizWithQuestions | QuizWithQuestions[] | null | undefined
+): QuizWithQuestions | null {
+  if (raw == null) return null;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
+
 export function sanitizeQuizForPlayer(quiz: QuizWithQuestions): QuizSanitized {
   return {
     ...quiz,

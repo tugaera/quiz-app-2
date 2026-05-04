@@ -4,7 +4,12 @@ import {
   createServiceRoleClient,
 } from "@/lib/supabase/server";
 import type { QuizWithQuestions } from "@/lib/types/database";
-import { sanitizeQuizForPlayer } from "@/lib/utils/sessionQuiz";
+import {
+  sanitizeQuizForPlayer,
+  unwrapEmbeddedQuiz,
+} from "@/lib/utils/sessionQuiz";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: Request,
@@ -37,7 +42,13 @@ export async function GET(
   const {
     data: { user },
   } = await userSb.auth.getUser();
-  const quiz = session.quiz as unknown as QuizWithQuestions;
+  const quiz = unwrapEmbeddedQuiz(
+    session.quiz as unknown as QuizWithQuestions | QuizWithQuestions[] | null
+  );
+  if (!quiz?.questions?.length) {
+    return NextResponse.json({ error: "Invalid session quiz" }, { status: 500 });
+  }
+
   const isHost = user?.id === session.host_id;
 
   const orderedQuiz: QuizWithQuestions = {
@@ -46,7 +57,7 @@ export async function GET(
       .sort((a, b) => a.position - b.position)
       .map((q) => ({
         ...q,
-        answer_options: [...q.answer_options].sort(
+        answer_options: [...(q.answer_options ?? [])].sort(
           (a, b) => a.position - b.position
         ),
       })),
@@ -54,21 +65,28 @@ export async function GET(
 
   const safeQuiz = isHost ? orderedQuiz : sanitizeQuizForPlayer(orderedQuiz);
 
-  return NextResponse.json({
-    session: {
-      id: session.id,
-      quiz_id: session.quiz_id,
-      host_id: session.host_id,
-      join_code: session.join_code,
-      status: session.status,
-      current_question_index: session.current_question_index,
-      question_started_at: session.question_started_at,
-      review_ends_at: session.review_ends_at,
-      allow_late_join: session.allow_late_join,
-      started_at: session.started_at,
-      finished_at: session.finished_at,
-      created_at: session.created_at,
-      quiz: safeQuiz,
+  return NextResponse.json(
+    {
+      session: {
+        id: session.id,
+        quiz_id: session.quiz_id,
+        host_id: session.host_id,
+        join_code: session.join_code,
+        status: session.status,
+        current_question_index: session.current_question_index,
+        question_started_at: session.question_started_at,
+        review_ends_at: session.review_ends_at,
+        allow_late_join: session.allow_late_join,
+        started_at: session.started_at,
+        finished_at: session.finished_at,
+        created_at: session.created_at,
+        quiz: safeQuiz,
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+      },
+    }
+  );
 }
